@@ -19,7 +19,7 @@
     "start:http": "node dist/index.js --http",
     "dev": "tsx src/index.ts",
     "dev:http": "tsx src/index.ts --http",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "tsx --test tests/*.test.ts"
   },
   "keywords": [
     "mcp",
