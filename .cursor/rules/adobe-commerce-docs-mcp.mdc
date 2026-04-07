@@ -1,0 +1,52 @@
+---
+description: Automatically use the Adobe Commerce Docs MCP tools for any Adobe Commerce / Magento related questions
+alwaysApply: true
+---
+
+# Adobe Commerce Documentation MCP
+
+This project includes an MCP server (`adobe-commerce-docs-mcp`) that provides direct access to official Adobe Commerce / Magento documentation from Adobe Experience League.
+
+## When to Use
+
+Automatically use the MCP tools whenever the user asks about:
+
+- Adobe Commerce or Magento features, configuration, or setup
+- Commerce Admin, catalog, checkout, payments, shipping, customers, promotions
+- Commerce REST API or GraphQL API
+- Adobe Commerce Cloud (ECE) deployment, environment, CLI
+- Magento PHP development: modules, plugins, observers, dependency injection, layouts, templates
+- Commerce operations: upgrades, patches, performance, indexing, caching, CLI commands
+- Commerce merchant services: Live Search, Product Recommendations, Catalog Service, Payment Services
+- Commerce integrations, extensions, or third-party services
+- Troubleshooting Commerce errors or known issues (Knowledge Base)
+
+## Available MCP Tools
+
+1. **`search_adobe_commerce_docs`** — BM25-ranked search with synonym expansion and fuzzy matching. Supports `section` filter.
+2. **`get_doc_content`** — Fetch full page content as clean markdown.
+3. **`list_doc_sections`** — List all documentation sections with page counts.
+4. **`refresh_sitemap`** — Force-refresh the cached sitemap index.
+5. **`get_related_docs`** — Find sibling pages in the doc tree for a given URL.
+6. **`get_code_examples`** — Extract only code snippets from a page (token-efficient).
+7. **`get_page_toc`** — Get heading hierarchy before fetching full content.
+8. **`lookup_error_code`** — Search Knowledge Base for errors, auto-fetches top result.
+9. **`multi_page_search`** — Search with multiple queries at once (reduces round-trips).
+
+## Workflow
+
+1. When the user asks a Commerce/Magento question, first call `search_adobe_commerce_docs` with relevant keywords.
+2. Review the results and pick the most relevant page(s).
+3. Call `get_doc_content` to fetch the full page content.
+4. Synthesize the answer from the documentation, citing the source URL.
+
+**For errors**: Use `lookup_error_code` which auto-fetches the top KB match.
+**For code**: Use `get_code_examples` to get just the code blocks (saves tokens).
+**For large pages**: Use `get_page_toc` first to understand structure.
+**For broad research**: Use `multi_page_search` with multiple query angles.
+
+## Important
+
+- Always cite the source documentation URL when providing answers.
+- If the first search doesn't yield good results, try alternative keywords or broaden/narrow the section filter.
+- Use `list_doc_sections` if unsure which section to search in.

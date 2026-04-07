@@ -1,56 +1,37 @@
 #!/usr/bin/env node
 
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { randomUUID } from "node:crypto";
+import { config } from "./config.js";
 import {
   loadSitemap,
   searchEntries,
   getDocSections,
+  getSectionSlugs,
+  getSectionEntries,
+  getRelatedDocs,
   clearCache,
   type DocEntry,
 } from "./sitemap.js";
+import {
+  fetchPageContent,
+  fetchRawContent,
+  extractCodeExamples,
+  extractPageToc,
+  extractStructuredContent,
+  clearMemoryCache,
+} from "./content.js";
 
-// --- State ---
+// ─── State ───────────────────────────────────────────────────────────────────
 
 let docEntries: DocEntry[] = [];
 let isLoaded = false;
 let loadPromise: Promise<void> | null = null;
-
-// --- LRU Page Content Cache ---
-
-interface CacheEntry {
-  content: string;
-  timestamp: number;
-}
-
-const PAGE_CACHE_MAX = 100;
-const PAGE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-const pageCache = new Map<string, CacheEntry>();
-
-function getFromPageCache(url: string): string | null {
-  const entry = pageCache.get(url);
-  if (!entry) return null;
-  if (Date.now() - entry.timestamp > PAGE_CACHE_TTL_MS) {
-    pageCache.delete(url);
-    return null;
-  }
-  // Move to end (most recently used) by re-inserting
-  pageCache.delete(url);
-  pageCache.set(url, entry);
-  return entry.content;
-}
-
-function setPageCache(url: string, content: string): void {
-  if (pageCache.size >= PAGE_CACHE_MAX) {
-    // Evict oldest (first key in Map iteration order)
-    const oldest = pageCache.keys().next().value;
-    if (oldest !== undefined) pageCache.delete(oldest);
-  }
-  pageCache.set(url, { content, timestamp: Date.now() });
-}
-
-// --- Sitemap Loading ---
+const startTime = Date.now();
 
 function preWarm(): void {
   if (loadPromise) return;
@@ -72,240 +53,311 @@ async function ensureLoaded(): Promise<void> {
     await loadPromise;
     if (isLoaded) return;
   }
-  // Retry if pre-warm failed
   docEntries = await loadSitemap();
   isLoaded = true;
 }
 
-// --- Page Content Fetching ---
-// Strategy: try .md endpoint first (native markdown), fall back to HTML parsing
-
-const FETCH_HEADERS = {
-  "User-Agent":
-    "Mozilla/5.0 (compatible; AdobeCommerceMCP/1.0; +https://github.com)",
-};
-
-const MAX_LENGTH = 15000;
-
-async function fetchPageContent(url: string): Promise<string> {
-  const cached = getFromPageCache(url);
-  if (cached) return cached;
-
-  // Try native .md endpoint first — much faster, no HTML parsing needed
-  const mdContent = await tryFetchMarkdown(url);
-  if (mdContent) {
-    const result = `Source: ${url}\n\n${mdContent}`;
-    setPageCache(url, result);
-    return result;
-  }
-
-  // Fallback: fetch HTML and convert
-  const htmlContent = await fetchAndParseHtml(url);
-  const result = `Source: ${url}\n\n${htmlContent}`;
-  setPageCache(url, result);
-  return result;
-}
-
-async function tryFetchMarkdown(url: string): Promise<string | null> {
-  try {
-    const mdUrl = url.endsWith("/") ? url.slice(0, -1) + ".md" : url + ".md";
-    const res = await fetch(mdUrl, {
-      headers: FETCH_HEADERS,
-      redirect: "follow",
-    });
-
-    if (!res.ok) return null;
-
-    const contentType = res.headers.get("content-type") || "";
-    if (!contentType.includes("markdown") && !contentType.includes("text/plain")) {
-      return null;
-    }
-
-    const raw = await res.text();
-    return cleanMarkdown(raw);
-  } catch {
-    return null;
-  }
-}
-
-function cleanMarkdown(raw: string): string {
-  const lines = raw.split("\n");
-  const cleaned: string[] = [];
-  let insideMetadataTable = false;
-  let skipBlock = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Skip ASCII table blocks that wrap metadata (Back To Browsing, Breadcrumbs,
-    // Article Metadata, Article Metadata Topics, Article Metadata Createdby)
-    if (trimmed.startsWith("+") && trimmed.endsWith("+") && trimmed.includes("---")) {
-      if (!insideMetadataTable) {
-        // Check if this is a metadata table by peeking at next content line
-        const nextContentLine = findNextContentLine(lines, i + 1);
-        if (isMetadataTableHeader(nextContentLine)) {
-          insideMetadataTable = true;
-          skipBlock = true;
-          continue;
-        }
-      }
-    }
-
-    if (skipBlock) {
-      if (trimmed.startsWith("+") && trimmed.endsWith("+") && trimmed.includes("---")) {
-        // Could be end of this table or a divider within it
-        const nextContentLine = findNextContentLine(lines, i + 1);
-        if (!nextContentLine || !nextContentLine.startsWith("|")) {
-          // End of table
-          skipBlock = false;
-          insideMetadataTable = false;
-        }
-      }
-      continue;
-    }
-
-    cleaned.push(line);
-  }
-
-  let content = cleaned
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  if (content.length > MAX_LENGTH) {
-    content = content.substring(0, MAX_LENGTH) + "\n\n... [content truncated]";
-  }
-
-  return content;
-}
-
-function findNextContentLine(lines: string[], start: number): string | null {
-  for (let i = start; i < Math.min(start + 3, lines.length); i++) {
-    const t = lines[i].trim();
-    if (t.length > 0) return t;
-  }
-  return null;
-}
-
-function isMetadataTableHeader(line: string | null): boolean {
-  if (!line) return false;
-  const lower = line.toLowerCase();
-  return (
-    lower.includes("back to browsing") ||
-    lower.includes("breadcrumbs") ||
-    lower.includes("article metadata") ||
-    lower.includes("created for") ||
-    lower.includes("createdby")
-  );
-}
-
-async function fetchAndParseHtml(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: { ...FETCH_HEADERS, Accept: "text/html" },
-  });
-  if (!res.ok) {
-    throw new Error(`Failed to fetch page: ${res.status} ${res.statusText}`);
-  }
-
-  const html = await res.text();
-  return extractMainContent(html);
-}
-
-function extractMainContent(html: string): string {
-  let content = html;
-  const mainMatch =
-    content.match(/<main[^>]*>([\s\S]*?)<\/main>/i) ??
-    content.match(/<article[^>]*>([\s\S]*?)<\/article>/i) ??
-    content.match(/<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i);
-
-  if (mainMatch) {
-    content = mainMatch[1];
-  }
-
-  content = content
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
-    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, "")
-    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, "")
-    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, "")
-    .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, "\n# $1\n")
-    .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gi, "\n## $1\n")
-    .replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gi, "\n### $1\n")
-    .replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gi, "\n#### $1\n")
-    .replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code><\/pre>/gi, "\n```\n$1\n```\n")
-    .replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, "`$1`")
-    .replace(/<a[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)")
-    .replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, "- $1\n")
-    .replace(/<\/?[uo]l[^>]*>/gi, "\n")
-    .replace(/<p[^>]*>([\s\S]*?)<\/p>/gi, "\n$1\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/div>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-
-  if (content.length > MAX_LENGTH) {
-    content = content.substring(0, MAX_LENGTH) + "\n\n... [content truncated]";
-  }
-
-  return content;
-}
-
-// --- MCP Server ---
+// ─── Server ──────────────────────────────────────────────────────────────────
 
 const server = new McpServer({
   name: "adobe-commerce-docs",
-  version: "1.1.0",
+  version: config.version,
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  RESOURCES  (Phase 1)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.resource(
+  "sections",
+  "commerce://sections",
+  {
+    description:
+      "All Adobe Commerce documentation sections with page counts",
+    mimeType: "text/plain",
+  },
+  async () => {
+    await ensureLoaded();
+    const sections = getDocSections(docEntries);
+    const sorted = [...sections.entries()].sort((a, b) => b[1] - a[1]);
+    const text = sorted
+      .map(([slug, count]) => {
+        const label = slug
+          .replace(/-/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase());
+        return `${label} (${slug}) — ${count} pages`;
+      })
+      .join("\n");
+
+    return {
+      contents: [
+        {
+          uri: "commerce://sections",
+          text: `Adobe Commerce Docs — ${docEntries.length} total pages\n\n${text}`,
+          mimeType: "text/plain",
+        },
+      ],
+    };
+  },
+);
+
+server.resource(
+  "stats",
+  "commerce://stats",
+  {
+    description: "MCP server status: version, uptime, index size",
+    mimeType: "application/json",
+  },
+  async () => {
+    await ensureLoaded();
+    const stats = {
+      version: config.version,
+      uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
+      total_pages_indexed: docEntries.length,
+      sections: getDocSections(docEntries).size,
+      loaded: isLoaded,
+    };
+    return {
+      contents: [
+        {
+          uri: "commerce://stats",
+          text: JSON.stringify(stats, null, 2),
+          mimeType: "application/json",
+        },
+      ],
+    };
+  },
+);
+
+server.resource(
+  "section-docs",
+  new ResourceTemplate("commerce://docs/{section}", {
+    list: async () => {
+      await ensureLoaded();
+      return {
+        resources: getSectionSlugs(docEntries).map((slug) => ({
+          uri: `commerce://docs/${slug}`,
+          name: slug
+            .replace(/-/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase()),
+          description: `Browse ${slug} documentation`,
+          mimeType: "text/plain",
+        })),
+      };
+    },
+    complete: {
+      section: async (value) => {
+        await ensureLoaded();
+        const slugs = getSectionSlugs(docEntries);
+        return value
+          ? slugs.filter((s) => s.startsWith(value.toLowerCase()))
+          : slugs;
+      },
+    },
+  }),
+  {
+    description: "Browse documentation pages within a section",
+    mimeType: "text/plain",
+  },
+  async (uri, variables) => {
+    await ensureLoaded();
+    const section = variables.section as string;
+    const entries = getSectionEntries(docEntries, section);
+
+    if (entries.length === 0) {
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            text: `No pages found for section "${section}".`,
+            mimeType: "text/plain",
+          },
+        ],
+      };
+    }
+
+    const text = entries.map((e) => `- ${e.title}\n  ${e.url}`).join("\n");
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          text: `${section} — ${entries.length} pages:\n\n${text}`,
+          mimeType: "text/plain",
+        },
+      ],
+    };
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  PROMPTS  (Phase 2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.prompt(
+  "troubleshoot-commerce-error",
+  "Troubleshoot an Adobe Commerce / Magento error using the Knowledge Base",
+  {
+    error_message: z
+      .string()
+      .describe("The error message or error code to troubleshoot"),
+  },
+  ({ error_message }) => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            `I'm encountering this Adobe Commerce / Magento error:`,
+            "",
+            "```",
+            error_message,
+            "```",
+            "",
+            "Please help me troubleshoot:",
+            '1. Use `search_adobe_commerce_docs` to search the Knowledge Base (section: "commerce-knowledge-base") for this error.',
+            "2. Also search general documentation for relevant configuration guides.",
+            "3. Fetch the most relevant pages using `get_doc_content`.",
+            "4. Provide: **Root cause**, **Step-by-step solution**, **Prevention tips**, and **Source links**.",
+          ].join("\n"),
+        },
+      },
+    ],
+  }),
+);
+
+server.prompt(
+  "explain-commerce-concept",
+  "Explain an Adobe Commerce / Magento concept using official docs",
+  {
+    topic: z
+      .string()
+      .describe(
+        "The concept to explain (e.g., 'dependency injection', 'EAV model')",
+      ),
+  },
+  ({ topic }) => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            `Explain the Adobe Commerce / Magento concept: **${topic}**`,
+            "",
+            "1. Use `search_adobe_commerce_docs` to find documentation about this topic.",
+            "2. Fetch the most relevant page(s) with `get_doc_content`.",
+            "3. Provide: **Definition**, **How it works** (with architecture details), **Code examples**, **Best practices**, and **Related documentation links**.",
+            "",
+            "Cite all source URLs.",
+          ].join("\n"),
+        },
+      },
+    ],
+  }),
+);
+
+server.prompt(
+  "commerce-code-review",
+  "Review Magento/Commerce code against official best practices",
+  {
+    code: z
+      .string()
+      .describe("The PHP/XML/JS code to review"),
+  },
+  ({ code }) => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            "Review this Adobe Commerce / Magento code against official best practices:",
+            "",
+            "```",
+            code,
+            "```",
+            "",
+            "1. Identify the code type (module, plugin, observer, layout XML, etc.).",
+            "2. Use `search_adobe_commerce_docs` to find relevant coding standards.",
+            "3. Fetch best-practices pages with `get_doc_content`.",
+            "4. Provide: **Compliance check**, **Issues found**, **Improvements with examples**, **Documentation references**.",
+          ].join("\n"),
+        },
+      },
+    ],
+  }),
+);
+
+server.prompt(
+  "commerce-upgrade-guide",
+  "Generate an upgrade checklist for Commerce version migration",
+  {
+    from_version: z.string().describe("Current version (e.g., '2.4.6')"),
+    to_version: z.string().describe("Target version (e.g., '2.4.7')"),
+  },
+  ({ from_version, to_version }) => ({
+    messages: [
+      {
+        role: "user" as const,
+        content: {
+          type: "text" as const,
+          text: [
+            `I need to upgrade Adobe Commerce from **${from_version}** to **${to_version}**.`,
+            "",
+            "1. Use `search_adobe_commerce_docs` to find release notes, upgrade guides (section: commerce-operations), and breaking changes.",
+            "2. Fetch relevant pages with `get_doc_content`.",
+            "3. Provide: **Pre-upgrade checklist**, **Breaking changes**, **Step-by-step upgrade commands**, **Post-upgrade verification**, **Rollback plan**.",
+            "",
+            "Cite all source URLs.",
+          ].join("\n"),
+        },
+      },
+    ],
+  }),
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TOOLS — Existing (updated)
+// ═══════════════════════════════════════════════════════════════════════════════
 
 server.tool(
   "search_adobe_commerce_docs",
-  "Search through Adobe Commerce / Magento documentation. Returns matching doc pages from the official Adobe Experience League sitemap. Use keywords like 'catalog', 'checkout', 'graphql', 'rest api', 'admin', 'cloud', 'payment', etc.",
+  "Search Adobe Commerce / Magento documentation. Returns pages ranked by BM25 relevance with snippets. Supports synonym expansion (e.g. 'graphql' also matches 'gql') and fuzzy matching for typos.",
   {
     query: z
       .string()
       .describe(
-        "Search keywords (e.g., 'graphql product query', 'checkout configuration', 'cloud deploy')"
+        "Search keywords (e.g., 'graphql product query', 'checkout configuration')",
       ),
     limit: z
       .number()
       .min(1)
       .max(50)
       .default(15)
-      .describe("Max number of results to return (default: 15)"),
+      .describe("Max results (default: 15)"),
     section: z
       .string()
       .optional()
       .describe(
-        "Filter by section: commerce-admin, commerce-operations, commerce-cloud-service, commerce-merchant-services, commerce-php, commerce-learn, etc."
+        "Filter by section slug (e.g., commerce-admin, commerce-php, commerce-cloud-service)",
       ),
   },
   async ({ query, limit, section }) => {
     try {
       await ensureLoaded();
 
-      let searchPool = docEntries;
-      if (section) {
-        searchPool = docEntries.filter((e) =>
-          e.path.includes(`/${section}/`)
-        );
-      }
-
-      const results = searchEntries(searchPool, query, limit);
+      const pool = section
+        ? getSectionEntries(docEntries, section)
+        : docEntries;
+      const results = searchEntries(pool, query, limit);
 
       if (results.length === 0) {
         return {
           content: [
             {
               type: "text" as const,
-              text: `No results found for "${query}"${section ? ` in section "${section}"` : ""}. Try broader keywords or remove the section filter.`,
+              text: `No results for "${query}"${section ? ` in "${section}"` : ""}. Try broader keywords or remove the section filter.`,
             },
           ],
         };
@@ -314,7 +366,7 @@ server.tool(
       const formatted = results
         .map(
           (r, i) =>
-            `${i + 1}. **${r.title}**\n   URL: ${r.url}\n   Last updated: ${r.lastmod}`
+            `${i + 1}. **${r.entry.title}**\n   URL: ${r.entry.url}\n   ${r.snippet}\n   Updated: ${r.entry.lastmod}`,
         )
         .join("\n\n");
 
@@ -322,7 +374,7 @@ server.tool(
         content: [
           {
             type: "text" as const,
-            text: `Found ${results.length} results for "${query}":\n\n${formatted}\n\nUse the \`get_doc_content\` tool with a URL above to fetch the full page content.`,
+            text: `Found ${results.length} results for "${query}":\n\n${formatted}\n\nUse \`get_doc_content\` with a URL to read the full page.`,
           },
         ],
       };
@@ -331,70 +383,57 @@ server.tool(
         content: [
           {
             type: "text" as const,
-            text: `Error searching docs: ${err instanceof Error ? err.message : String(err)}`,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
           },
         ],
         isError: true,
       };
     }
-  }
+  },
 );
 
 server.tool(
   "get_doc_content",
-  "Fetch and return the content of a specific Adobe Commerce documentation page. Provide the full URL from search results.",
+  "Fetch the full content of an Adobe Commerce documentation page as clean markdown.",
   {
     url: z
       .string()
       .url()
-      .describe(
-        "Full URL of the documentation page (e.g., https://experienceleague.adobe.com/en/docs/commerce-admin/...)"
-      ),
+      .describe("Full URL of the documentation page"),
   },
   async ({ url }) => {
     try {
       const content = await fetchPageContent(url);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: content,
-          },
-        ],
-      };
+      return { content: [{ type: "text" as const, text: content }] };
     } catch (err) {
       return {
         content: [
           {
             type: "text" as const,
-            text: `Error fetching page: ${err instanceof Error ? err.message : String(err)}`,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
           },
         ],
         isError: true,
       };
     }
-  }
+  },
 );
 
 server.tool(
   "list_doc_sections",
-  "List all available sections/categories of Adobe Commerce documentation with page counts.",
+  "List all Adobe Commerce documentation sections with page counts.",
   {},
   async () => {
     try {
       await ensureLoaded();
-
       const sections = getDocSections(docEntries);
-      const sorted = [...sections.entries()].sort(
-        (a, b) => b[1] - a[1]
-      );
-
+      const sorted = [...sections.entries()].sort((a, b) => b[1] - a[1]);
       const formatted = sorted
-        .map(([section, count]) => {
-          const title = section
+        .map(([slug, count]) => {
+          const label = slug
             .replace(/-/g, " ")
             .replace(/\b\w/g, (c) => c.toUpperCase());
-          return `- **${title}** (\`${section}\`) — ${count} pages`;
+          return `- **${label}** (\`${slug}\`) — ${count} pages`;
         })
         .join("\n");
 
@@ -402,7 +441,7 @@ server.tool(
         content: [
           {
             type: "text" as const,
-            text: `Adobe Commerce Documentation Sections (${docEntries.length} total pages):\n\n${formatted}\n\nUse the section slug (in backticks) with the \`search_adobe_commerce_docs\` tool's \`section\` parameter to filter results.`,
+            text: `Adobe Commerce Documentation (${docEntries.length} pages):\n\n${formatted}\n\nUse the slug with \`search_adobe_commerce_docs\` section parameter.`,
           },
         ],
       };
@@ -411,26 +450,25 @@ server.tool(
         content: [
           {
             type: "text" as const,
-            text: `Error listing sections: ${err instanceof Error ? err.message : String(err)}`,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
           },
         ],
         isError: true,
       };
     }
-  }
+  },
 );
 
 server.tool(
   "refresh_sitemap",
-  "Force refresh the cached sitemap data from Adobe Experience League. Use when you need the latest documentation URLs.",
+  "Force-refresh the cached sitemap data from Adobe Experience League.",
   {},
   async () => {
     try {
       isLoaded = false;
       loadPromise = null;
       docEntries = [];
-      pageCache.clear();
-
+      clearMemoryCache();
       await clearCache();
       await ensureLoaded();
 
@@ -438,7 +476,7 @@ server.tool(
         content: [
           {
             type: "text" as const,
-            text: `Sitemap refreshed successfully. Loaded ${docEntries.length} Commerce documentation pages.`,
+            text: `Sitemap refreshed. ${docEntries.length} pages indexed.`,
           },
         ],
       };
@@ -447,21 +485,382 @@ server.tool(
         content: [
           {
             type: "text" as const,
-            text: `Error refreshing sitemap: ${err instanceof Error ? err.message : String(err)}`,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
           },
         ],
         isError: true,
       };
     }
-  }
+  },
 );
 
-async function main() {
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TOOLS — New (Phase 3)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+server.tool(
+  "get_related_docs",
+  "Find sibling/related documentation pages for a given page URL (same parent in the doc tree).",
+  {
+    url: z
+      .string()
+      .url()
+      .describe("Full URL of the documentation page"),
+    limit: z
+      .number()
+      .min(1)
+      .max(30)
+      .default(10)
+      .describe("Max related pages (default: 10)"),
+  },
+  async ({ url, limit }) => {
+    try {
+      await ensureLoaded();
+      const related = getRelatedDocs(docEntries, url, limit);
+
+      if (related.length === 0) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `No related pages found for ${url}.`,
+            },
+          ],
+        };
+      }
+
+      const formatted = related
+        .map((r, i) => `${i + 1}. **${r.title}**\n   ${r.url}`)
+        .join("\n\n");
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `${related.length} related pages:\n\n${formatted}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "get_code_examples",
+  "Extract only code examples from a documentation page. Returns fenced code blocks without prose — much more token-efficient than full page fetch.",
+  {
+    url: z
+      .string()
+      .url()
+      .describe("Full URL of the documentation page"),
+  },
+  async ({ url }) => {
+    try {
+      const raw = await fetchRawContent(url);
+      const examples = extractCodeExamples(raw);
+
+      if (examples.length === 0) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `No code examples found on ${url}.`,
+            },
+          ],
+        };
+      }
+
+      const formatted = examples
+        .map(
+          (ex, i) =>
+            `### Example ${i + 1}${ex.language !== "text" ? ` (${ex.language})` : ""}\n\`\`\`${ex.language}\n${ex.code}\n\`\`\``,
+        )
+        .join("\n\n");
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `${examples.length} code example(s) from ${url}:\n\n${formatted}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "get_page_toc",
+  "Get the table of contents (heading hierarchy) of a documentation page. Useful for understanding structure before fetching the full (expensive) content.",
+  {
+    url: z
+      .string()
+      .url()
+      .describe("Full URL of the documentation page"),
+  },
+  async ({ url }) => {
+    try {
+      const raw = await fetchRawContent(url);
+      const toc = extractPageToc(raw);
+
+      if (toc.length === 0) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `No headings found on ${url}.`,
+            },
+          ],
+        };
+      }
+
+      const formatted = toc
+        .map((h) => `${"  ".repeat(h.level - 1)}- ${h.title}`)
+        .join("\n");
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Table of Contents — ${url}:\n\n${formatted}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "lookup_error_code",
+  "Look up an Adobe Commerce error code or message in the Knowledge Base. Auto-fetches the top result content for immediate answers.",
+  {
+    error: z
+      .string()
+      .describe(
+        "Error code or message (e.g., 'MDVA-43395', 'Unable to serialize value')",
+      ),
+  },
+  async ({ error }) => {
+    try {
+      await ensureLoaded();
+
+      const kbPool = getSectionEntries(docEntries, "commerce-knowledge-base");
+      let results = searchEntries(kbPool, error, 5);
+
+      if (results.length === 0) {
+        results = searchEntries(docEntries, error, 5);
+      }
+
+      if (results.length === 0) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `No documentation found for "${error}". Try different keywords or check Adobe Commerce support.`,
+            },
+          ],
+        };
+      }
+
+      let pageContent = "";
+      try {
+        pageContent = await fetchPageContent(results[0].entry.url);
+      } catch {
+        // non-critical
+      }
+
+      const others = results
+        .slice(1)
+        .map((r, i) => `${i + 2}. **${r.entry.title}**\n   ${r.entry.url}`)
+        .join("\n\n");
+
+      const text = pageContent
+        ? `## ${results[0].entry.title}\n\n${pageContent}${others ? `\n\n---\n\n## Other Matches\n\n${others}` : ""}`
+        : results
+            .map(
+              (r, i) =>
+                `${i + 1}. **${r.entry.title}**\n   ${r.entry.url}\n   ${r.snippet}`,
+            )
+            .join("\n\n");
+
+      return { content: [{ type: "text" as const, text }] };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.tool(
+  "multi_page_search",
+  "Search documentation with multiple queries at once. Returns de-duplicated results from all queries — reduces round-trips when researching a topic from multiple angles.",
+  {
+    queries: z
+      .array(z.string())
+      .min(1)
+      .max(5)
+      .describe("Array of search queries (1–5)"),
+    limit_per_query: z
+      .number()
+      .min(1)
+      .max(20)
+      .default(5)
+      .describe("Max results per query (default: 5)"),
+    section: z
+      .string()
+      .optional()
+      .describe("Optional section filter for all queries"),
+  },
+  async ({ queries, limit_per_query, section }) => {
+    try {
+      await ensureLoaded();
+
+      const pool = section
+        ? getSectionEntries(docEntries, section)
+        : docEntries;
+      const seen = new Set<string>();
+      const blocks: string[] = [];
+
+      for (const q of queries) {
+        const results = searchEntries(pool, q, limit_per_query);
+        const unique = results.filter((r) => !seen.has(r.entry.url));
+        unique.forEach((r) => seen.add(r.entry.url));
+
+        if (unique.length > 0) {
+          const list = unique
+            .map(
+              (r, i) =>
+                `  ${i + 1}. **${r.entry.title}**\n     ${r.entry.url}\n     ${r.snippet}`,
+            )
+            .join("\n");
+          blocks.push(`### "${q}" (${unique.length} results)\n\n${list}`);
+        } else {
+          blocks.push(`### "${q}"\n\n  No results.`);
+        }
+      }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Multi-search — ${seen.size} unique pages:\n\n${blocks.join("\n\n")}`,
+          },
+        ],
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  TRANSPORT & MAIN  (Phase 6)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function startHttpTransport(): Promise<void> {
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+  });
+
+  await server.connect(transport);
+
+  const httpServer = createServer(
+    async (req: IncomingMessage, res: ServerResponse) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader(
+        "Access-Control-Allow-Methods",
+        "GET, POST, DELETE, OPTIONS",
+      );
+      res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type, mcp-session-id",
+      );
+
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      try {
+        await transport.handleRequest(req, res);
+      } catch (err) {
+        console.error("HTTP error:", err);
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("Internal Server Error");
+        }
+      }
+    },
+  );
+
+  httpServer.listen(config.httpPort, () => {
+    console.error(
+      `Adobe Commerce Docs MCP running on http://localhost:${config.httpPort}`,
+    );
+  });
+}
+
+async function startStdioTransport(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("Adobe Commerce Docs MCP server running on stdio");
+}
 
-  // Pre-warm: start loading sitemap immediately after connection
+async function main(): Promise<void> {
+  const useHttp = process.argv.includes("--http");
+
+  if (useHttp) {
+    await startHttpTransport();
+  } else {
+    await startStdioTransport();
+  }
+
   preWarm();
 }
 

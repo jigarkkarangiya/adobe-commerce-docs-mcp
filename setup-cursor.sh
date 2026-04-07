@@ -26,9 +26,12 @@ fi
 
 echo "  Node.js $(node -v) ... OK"
 
-# Verify npx can fetch the package
-echo "  Verifying package is reachable ..."
-if ! npx -y adobe-commerce-docs-mcp --help &> /dev/null; then
+# Verify the package is reachable on npm
+echo "  Checking npm registry ..."
+if npm view adobe-commerce-docs-mcp version &> /dev/null; then
+    PKG_VERSION=$(npm view adobe-commerce-docs-mcp version 2>/dev/null)
+    echo "  Package v$PKG_VERSION found on npm ... OK"
+else
     echo "  (Package not yet on npm — will use local build if available)"
 fi
 
@@ -83,5 +86,13 @@ echo ""
 echo "Next steps:"
 echo "  1. Restart Cursor"
 echo "  2. Open a chat (Agent mode)"
-echo "  3. Ask: \"Search Adobe Commerce docs for checkout\""
+echo "  3. Try any of these:"
+echo ""
+echo "     \"Search Adobe Commerce docs for checkout\""
+echo "     \"Look up error MDVA-43395\""
+echo "     \"Show me code examples from the DI docs\""
+echo "     \"Help me upgrade from 2.4.6 to 2.4.7\""
+echo ""
+echo "Available: 9 tools, 3 resources, 4 prompts"
+echo "Supports: BM25 search, synonyms, fuzzy matching, and more"
 echo ""
