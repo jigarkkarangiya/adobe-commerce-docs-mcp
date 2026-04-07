@@ -33,11 +33,11 @@
   "author": "Jigar Karangiya",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jigark/adobe-commerce-docs-mcp"
+    "url": "https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp"
   },
-  "homepage": "https://github.com/jigark/adobe-commerce-docs-mcp#readme",
+  "homepage": "https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp#readme",
   "bugs": {
-    "url": "https://github.com/jigark/adobe-commerce-docs-mcp/issues"
+    "url": "https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/issues"
   },
   "engines": {
     "node": ">=18.0.0"
