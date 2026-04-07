@@ -1,0 +1,54 @@
+{
+  "name": "adobe-commerce-docs-mcp",
+  "version": "1.1.0",
+  "description": "MCP server for searching Adobe Commerce / Magento documentation via sitemap. Provides AI assistants with tools to search, browse, and read official Adobe Commerce docs.",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "adobe-commerce-docs-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "adobe-commerce",
+    "magento",
+    "documentation",
+    "ai",
+    "cursor",
+    "claude",
+    "sitemap"
+  ],
+  "license": "MIT",
+  "author": "Jigar Karangiya",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jigark/adobe-commerce-docs-mcp"
+  },
+  "homepage": "https://github.com/jigark/adobe-commerce-docs-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/jigark/adobe-commerce-docs-mcp/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "fast-xml-parser": "^5.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
