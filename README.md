@@ -19,11 +19,60 @@ An MCP (Model Context Protocol) server that gives AI assistants direct access to
 | `list_doc_sections` | List all doc sections with page counts |
 | `refresh_sitemap` | Force-refresh the sitemap cache |
 
-## Installation
+---
 
-### Use with Cursor
+## Quick Setup for Cursor (Step-by-Step)
 
-Add to your Cursor MCP config (`~/.cursor/mcp.json`):
+If you've never set up an MCP server before, follow these steps exactly.
+
+### Prerequisites
+
+You need **Node.js 18+** installed. Check by opening a terminal and running:
+
+```bash
+node --version
+```
+
+If you see `v18.x.x` or higher, you're good. If not, install Node.js from [nodejs.org](https://nodejs.org/).
+
+### Step 1: Open Cursor Settings
+
+1. Open **Cursor**
+2. Press `Ctrl + Shift + J` (Linux/Windows) or `Cmd + Shift + J` (macOS) to open Cursor Settings
+3. In the left sidebar, click **"MCP"**
+4. Click **"+ Add new MCP server"**
+
+### Step 2: Add the Server
+
+A dialog will appear. Fill it in:
+
+| Field | Value |
+|---|---|
+| **Name** | `adobe-commerce-docs` |
+| **Type** | `command` |
+| **Command** | `npx -y adobe-commerce-docs-mcp` |
+
+Click **"Add"** — that's it.
+
+### Step 3: Verify It Works
+
+You should see `adobe-commerce-docs` in your MCP list with a **green dot** (active).
+
+Now open any chat in Cursor (Agent mode) and try asking:
+
+> *"Search Adobe Commerce docs for checkout configuration"*
+
+Cursor will use the MCP tools automatically.
+
+### Alternative: Edit the Config File Directly
+
+If you prefer editing config files, open (or create) this file:
+
+- **Linux**: `~/.cursor/mcp.json`
+- **macOS**: `~/.cursor/mcp.json`
+- **Windows**: `%USERPROFILE%\.cursor\mcp.json`
+
+Paste this JSON:
 
 ```json
 {
@@ -36,9 +85,44 @@ Add to your Cursor MCP config (`~/.cursor/mcp.json`):
 }
 ```
 
-### Use with Claude Desktop
+> **Note**: If the file already exists and has other servers, just add the `"adobe-commerce-docs"` block inside the existing `"mcpServers"` object — don't replace the whole file.
 
-Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
+Then restart Cursor.
+
+---
+
+## Troubleshooting
+
+### "MCP server failed to start"
+
+- Make sure Node.js 18+ is installed (`node --version`)
+- Try running the command directly in a terminal to see the error:
+  ```bash
+  npx -y adobe-commerce-docs-mcp
+  ```
+- If you're behind a corporate proxy, make sure npm can reach the registry:
+  ```bash
+  npm config set registry https://registry.npmjs.org/
+  ```
+
+### Green dot doesn't appear
+
+- Click the refresh icon next to the server name in MCP settings
+- If it still fails, restart Cursor completely
+
+### "No results found" for searches
+
+- The sitemap loads on first use. Wait a few seconds and try again.
+- Try broader keywords (e.g., `"checkout"` instead of `"checkout multishipping step 3"`)
+- Run the `refresh_sitemap` tool to reload the latest data
+
+---
+
+## Setup for Other Tools
+
+### Claude Desktop
+
+Add to config (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
@@ -51,9 +135,9 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 }
 ```
 
-### Use with VS Code / Copilot
+### VS Code / Copilot
 
-Add to your VS Code settings (`.vscode/mcp.json`):
+Add to `.vscode/mcp.json` in your project:
 
 ```json
 {
@@ -66,7 +150,7 @@ Add to your VS Code settings (`.vscode/mcp.json`):
 }
 ```
 
-### Run Locally (from source)
+### Run from Source
 
 ```bash
 git clone https://github.com/jigark/adobe-commerce-docs-mcp.git
@@ -76,14 +160,19 @@ npm run build
 npm start
 ```
 
+---
+
 ## Usage Examples
 
-Once connected, your AI assistant can use these tools naturally:
+Once connected, just ask naturally in any AI chat:
 
 - *"Search Adobe Commerce docs for GraphQL product queries"*
-- *"Get the documentation page for checkout configuration"*
+- *"Get the documentation page for payment methods"*
 - *"List all Adobe Commerce doc sections"*
 - *"Find docs about cloud deployment"*
+- *"What does the Commerce docs say about catalog price rules?"*
+
+The AI will automatically call the right MCP tools and show you the results.
 
 ## How It Works
 
