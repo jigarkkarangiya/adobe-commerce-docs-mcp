@@ -22,7 +22,6 @@ import {
   fetchRawContent,
   extractCodeExamples,
   extractPageToc,
-  extractStructuredContent,
   clearMemoryCache,
 } from "./content.js";
 

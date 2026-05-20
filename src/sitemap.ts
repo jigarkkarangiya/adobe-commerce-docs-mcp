@@ -10,6 +10,7 @@ export interface DocEntry {
   path: string;
   pathSegments: string[];
   title: string;
+  section: string;
   alternates: { lang: string; href: string }[];
 }
 
@@ -155,12 +156,15 @@ function extractEntriesFromUrlset(parsed: any): DocEntry[] {
       .filter(Boolean)
       .map((s) => s.replace(/-/g, " ").toLowerCase());
 
+    const sectionParts = path.split("/").filter(Boolean);
+    const section = sectionParts.length >= 3 ? sectionParts[2] : (sectionParts[1] || "general");
     entries.push({
       url: loc,
       lastmod,
       path,
       pathSegments,
       title: urlToTitle(loc),
+      section,
       alternates,
     });
   }
@@ -526,11 +530,7 @@ export function searchEntries(
 export function getDocSections(entries: DocEntry[]): Map<string, number> {
   const sections = new Map<string, number>();
   for (const entry of entries) {
-    const parts = entry.path.split("/").filter(Boolean);
-    if (parts.length >= 3) {
-      const section = parts[2];
-      sections.set(section, (sections.get(section) || 0) + 1);
-    }
+    if (entry.section) sections.set(entry.section, (sections.get(entry.section) || 0) + 1);
   }
   return sections;
 }
@@ -543,7 +543,7 @@ export function getSectionEntries(
   entries: DocEntry[],
   section: string,
 ): DocEntry[] {
-  return entries.filter((e) => e.path.includes(`/${section}/`));
+  return entries.filter((e) => e.section === section);
 }
 
 export function getRelatedDocs(
