@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.png" alt="Adobe Commerce Docs MCP logo" width="120" height="120">
+</p>
+
 # Adobe Commerce Docs MCP Server
 
 [![npm version](https://img.shields.io/npm/v/adobe-commerce-docs-mcp)](https://www.npmjs.com/package/adobe-commerce-docs-mcp)

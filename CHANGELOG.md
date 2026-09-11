@@ -5,12 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.0.4] - 2026-09-12
 
 ### Added
 - `.mcp.json` at repo root, the standard MCP client config file (Open
   Plugins standard) that lets tool directories like cursor.directory
   auto-detect this as a valid MCP server without inspecting `package.json`.
+- Logo (`assets/logo.png` / `assets/logo.svg`), shown at the top of the
+  README and used for the cursor.directory and MCP Registry listings.
+- Listed on [cursor.directory](https://cursor.directory) for Cursor
+  discovery, alongside the existing npm / GitHub / official MCP Registry
+  / mcp.so / Smithery / Glama listings.
+
+### Changed
+- CI no longer publishes to npm automatically. npm requires a one-time
+  password on publish for this account, which an unattended CI run can't
+  provide — every tag-triggered publish attempt failed with `EOTP`
+  regardless of token type. Releases are published manually
+  (`npm publish`) going forward; CI still runs build+test on every push,
+  including `v*` tags, as a pre-release sanity check.
+- Removed the now-unused `NPM_TOKEN` repository secret.
 
 ## [2.0.3] - 2026-09-12
 
@@ -141,6 +155,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - LRU page cache (100 pages, 1h TTL) plus a 24h disk sitemap cache.
 - Sitemap index support with concurrent sub-sitemap fetching.
 
+[2.0.4]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.0...v2.0.1

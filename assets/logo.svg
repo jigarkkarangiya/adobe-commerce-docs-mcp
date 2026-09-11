@@ -1,0 +1,39 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF5470"/>
+      <stop offset="100%" stop-color="#6E1530"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+
+  <!-- premium thin-line document mark -->
+  <g transform="translate(212 224)" fill="none" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M-92 -88
+             L 38 -88
+             L 80 -46
+             L 80 92
+             L -92 92 Z"/>
+    <path d="M38 -88 L38 -46 L80 -46"/>
+    <line x1="-62" y1="-14" x2="18" y2="-14" stroke-opacity="0.85"/>
+    <line x1="-62" y1="16" x2="18" y2="16" stroke-opacity="0.85"/>
+    <line x1="-62" y1="46" x2="-4" y2="46" stroke-opacity="0.85"/>
+  </g>
+
+  <!-- search glass, overlapping the page's lower-right corner -->
+  <g transform="translate(276 288)" fill="none" stroke="#FFFFFF" stroke-width="10" stroke-linecap="round">
+    <circle r="42" fill="#8A1538"/>
+    <circle r="42"/>
+    <line x1="30" y1="30" x2="60" y2="60"/>
+  </g>
+
+  <!-- JK badge, matching the official mark: black circle, white "JK" -->
+  <g transform="translate(400 400)">
+    <circle r="64" fill="#000000"/>
+    <text x="0" y="15" text-anchor="middle"
+          font-family="'Poppins', 'Helvetica Neue', Helvetica, Arial, sans-serif"
+          font-size="44" font-weight="500" letter-spacing="1"
+          fill="#FFFFFF">JK</text>
+  </g>
+</svg>
