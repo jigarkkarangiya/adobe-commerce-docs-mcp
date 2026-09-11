@@ -25,7 +25,22 @@ import {
   extractSection,
   smartTruncate,
   clearMemoryCache,
+  clearDiskPageCache,
 } from "./content.js";
+
+// A blank/whitespace-only query has no meaningful match criteria.
+// searchEntries() falls back to returning arbitrary entries for an empty
+// query (useful as a library-level "browse" behavior, and covered by its
+// own tests) — but a tool surfacing that fallback as if it were a real
+// ranked match, with empty snippets and no signal that the query was blank,
+// is misleading to whatever's reading the result. Reject it at the schema
+// boundary instead, with .trim() also normalizing incidental whitespace.
+const nonEmptyQuery = (fieldDescription: string) =>
+  z
+    .string()
+    .trim()
+    .min(1, "Must not be empty or whitespace-only")
+    .describe(fieldDescription);
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -356,11 +371,9 @@ server.registerTool(
     description:
       "Search Adobe Commerce / Magento documentation. Returns pages ranked by BM25 relevance with snippets. Supports synonym expansion (e.g. 'graphql' also matches 'gql') and fuzzy matching for typos.",
     inputSchema: {
-      query: z
-        .string()
-        .describe(
-          "Search keywords (e.g., 'graphql product query', 'checkout configuration')",
-        ),
+      query: nonEmptyQuery(
+        "Search keywords (e.g., 'graphql product query', 'checkout configuration')",
+      ),
       limit: z
         .number()
         .min(1)
@@ -560,10 +573,12 @@ server.registerTool(
   "refresh_sitemap",
   {
     title: "Refresh Sitemap",
-    description: "Force-refresh the cached sitemap data from Adobe Experience League.",
+    description:
+      "Force-refresh the cached sitemap data from Adobe Experience League, and clear the on-disk page content cache (individually cached per-page for up to 7 days) so subsequently fetched pages are re-downloaded fresh rather than served stale.",
     inputSchema: {},
     outputSchema: {
       pages_indexed: z.number(),
+      pages_cache_cleared: z.number(),
     },
     annotations: {
       title: "Refresh Sitemap",
@@ -580,16 +595,20 @@ server.registerTool(
       docEntries = [];
       clearMemoryCache();
       await clearCache();
+      const pagesCacheCleared = await clearDiskPageCache();
       await ensureLoaded();
 
       return {
         content: [
           {
             type: "text" as const,
-            text: `Sitemap refreshed. ${docEntries.length} pages indexed.`,
+            text: `Sitemap refreshed. ${docEntries.length} pages indexed. Cleared ${pagesCacheCleared} cached page(s) — they'll be re-fetched fresh on next access.`,
           },
         ],
-        structuredContent: { pages_indexed: docEntries.length },
+        structuredContent: {
+          pages_indexed: docEntries.length,
+          pages_cache_cleared: pagesCacheCleared,
+        },
       };
     } catch (err) {
       return {
@@ -907,11 +926,9 @@ server.registerTool(
     description:
       "Look up an Adobe Commerce error code or message in the Knowledge Base. Auto-fetches the top result content for immediate answers.",
     inputSchema: {
-      error: z
-        .string()
-        .describe(
-          "Error code or message (e.g., 'MDVA-43395', 'Unable to serialize value')",
-        ),
+      error: nonEmptyQuery(
+        "Error code or message (e.g., 'MDVA-43395', 'Unable to serialize value')",
+      ),
     },
     outputSchema: {
       error: z.string(),
@@ -1002,7 +1019,7 @@ server.registerTool(
       "Search documentation with multiple queries at once. Returns de-duplicated results from all queries — reduces round-trips when researching a topic from multiple angles.",
     inputSchema: {
       queries: z
-        .array(z.string())
+        .array(nonEmptyQuery("A search query"))
         .min(1)
         .max(5)
         .describe("Array of search queries (1–5)"),

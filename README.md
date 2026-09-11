@@ -110,7 +110,7 @@ List all available documentation sections with page counts. No parameters.
 
 ### `refresh_sitemap`
 
-Force-refresh the cached sitemap data. No parameters.
+Force-refresh the cached sitemap data, and clear the on-disk page content cache (individually cached per page for up to 7 days) so subsequently fetched pages come back fresh instead of stale. No parameters.
 
 ### Available Sections
 

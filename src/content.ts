@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { config } from "./config.js";
@@ -78,6 +78,32 @@ async function setDiskCache(url: string, content: string): Promise<void> {
     );
   } catch {
     // Non-critical — disk cache write failure shouldn't block
+  }
+}
+
+/**
+ * Clears every cached page from disk. Page content is cached for
+ * PAGE_DISK_CACHE_TTL_MS (7 days by default) independently of the sitemap
+ * cache — without this, a stale cached page keeps being served for up to
+ * that long with no way to force a fresh fetch (e.g. after Adobe updates a
+ * doc, or after a content-processing fix ships in a new server version).
+ */
+export async function clearDiskPageCache(): Promise<number> {
+  try {
+    const files = await readdir(config.pageCacheDir);
+    let cleared = 0;
+    for (const file of files) {
+      if (!file.endsWith(".md")) continue;
+      try {
+        await unlink(join(config.pageCacheDir, file));
+        cleared++;
+      } catch {
+        // best-effort — skip files that fail to delete
+      }
+    }
+    return cleared;
+  } catch {
+    return 0; // cache dir doesn't exist yet — nothing to clear
   }
 }
 

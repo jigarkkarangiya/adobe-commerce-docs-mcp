@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
+## [2.0.6] - 2026-09-12
+
+### Fixed
+- A blank or whitespace-only `query` on `search_adobe_commerce_docs` /
+  `multi_page_search`, or `error` on `lookup_error_code`, silently returned
+  arbitrary unrelated pages (score 0, empty snippet) presented in the same
+  shape as real ranked matches — with nothing signaling the query was
+  effectively empty. These fields are now schema-validated
+  (trimmed, non-empty required); a blank value is rejected with a clear
+  validation error instead of a misleading fake result.
+- `refresh_sitemap` only cleared the sitemap cache and in-memory page
+  cache, never the on-disk per-page cache (up to 7-day TTL) — so a stale
+  cached page kept being served for up to a week with no way to force a
+  fresh fetch, including after a content-processing fix like 2.0.5's
+  page-footer strip. It now also clears the disk page cache and reports
+  how many pages were cleared.
+
 ## [2.0.5] - 2026-09-12
 
 ### Added
@@ -177,6 +194,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - LRU page cache (100 pages, 1h TTL) plus a 24h disk sitemap cache.
 - Sitemap index support with concurrent sub-sitemap fetching.
 
+[2.0.6]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.5...v2.0.6
 [2.0.5]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.2...v2.0.3
