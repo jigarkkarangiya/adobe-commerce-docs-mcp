@@ -22,6 +22,8 @@ import {
   fetchRawContent,
   extractCodeExamples,
   extractPageToc,
+  extractSection,
+  smartTruncate,
   clearMemoryCache,
 } from "./content.js";
 
@@ -811,6 +813,78 @@ server.registerTool(
           },
         ],
         structuredContent: { url, toc },
+      };
+    } catch (err) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "get_doc_section",
+  {
+    title: "Get Doc Section",
+    description:
+      "Fetch just one section of a documentation page by heading name (matched case-insensitively, substring OK), including its nested subheadings. Use this for long pages where get_doc_content's full-page fetch would truncate before reaching the section you need — check get_page_toc first to find the heading name.",
+    inputSchema: {
+      url: z
+        .string()
+        .url()
+        .describe("Full URL of the documentation page"),
+      heading: z
+        .string()
+        .describe(
+          "Heading text to find (e.g., 'tunnel', 'SSH Tunnel Setup'). Matches case-insensitively as a substring.",
+        ),
+    },
+    outputSchema: {
+      url: z.string(),
+      heading: z.string().nullable(),
+      content: z.string(),
+    },
+    annotations: {
+      title: "Get Doc Section",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
+  async ({ url, heading }) => {
+    try {
+      const raw = await fetchRawContent(url);
+      const section = extractSection(raw, heading);
+
+      if (!section) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `No section matching "${heading}" found on ${url}. Use \`get_page_toc\` to see available headings.`,
+            },
+          ],
+          structuredContent: { url, heading: null, content: "" },
+        };
+      }
+
+      const truncated = smartTruncate(section.content, config.maxContentLength);
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Source: ${url}\nSection: ${section.heading}\n\n${truncated}`,
+          },
+        ],
+        structuredContent: { url, heading: section.heading, content: truncated },
       };
     } catch (err) {
       return {

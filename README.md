@@ -15,7 +15,7 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that 
 
 ## Features
 
-- **9 tools** — search, read pages, browse sections, find related docs, extract code examples, get page TOC, lookup errors, multi-query search, and refresh
+- **10 tools** — search, read pages, browse sections, fetch one section of a long page, find related docs, extract code examples, get page TOC, lookup errors, multi-query search, and refresh
 - **Structured tool output** — every tool returns typed `structuredContent` (JSON Schema `outputSchema`) alongside human-readable markdown, so clients can parse results programmatically
 - **Tool annotations** — all tools declare `readOnlyHint`/`openWorldHint`/`idempotentHint` so MCP clients can reduce confirmation friction for safe, read-only operations
 - **MCP Resources** — browsable `commerce://` URIs for sections and doc pages, capped at 300 entries per section read to stay context-safe
@@ -67,6 +67,15 @@ Get the heading hierarchy (table of contents) of a page. Useful for understandin
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `url` | string | Yes | Full URL of the doc page |
+
+### `get_doc_section`
+
+Fetch just one section of a page by heading name (case-insensitive, substring match), including its nested subheadings. Use this for long pages where `get_doc_content`'s full-page fetch would truncate before reaching the section you need — check `get_page_toc` first to find the heading name.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `url` | string | Yes | Full URL of the doc page |
+| `heading` | string | Yes | Heading text to find (e.g., `"tunnel"`, `"SSH Tunnel Setup"`) |
 
 ### `get_related_docs`
 

@@ -4,6 +4,8 @@ import {
   extractCodeExamples,
   extractPageToc,
   extractStructuredContent,
+  extractSection,
+  stripPageFooter,
   smartTruncate,
 } from "../src/content.js";
 
@@ -117,6 +119,72 @@ describe("extractStructuredContent", () => {
     const sc = extractStructuredContent(SAMPLE_MARKDOWN);
     assert.ok(sc.relatedLinks.length >= 2);
     assert.ok(sc.relatedLinks.some((l) => l.text === "Admin Guide"));
+  });
+});
+
+describe("extractSection", () => {
+  it("finds a section by exact heading match", () => {
+    const section = extractSection(SAMPLE_MARKDOWN, "Creating Products");
+    assert.ok(section);
+    assert.equal(section!.heading, "Creating Products");
+    assert.equal(section!.level, 2);
+    assert.ok(section!.content.includes("productFactory"));
+  });
+
+  it("matches case-insensitively and by substring", () => {
+    const section = extractSection(SAMPLE_MARKDOWN, "categor");
+    assert.ok(section);
+    assert.equal(section!.heading, "Configuring Categories");
+  });
+
+  it("includes nested subheadings but stops at the next same-level heading", () => {
+    const section = extractSection(SAMPLE_MARKDOWN, "Configuring Categories");
+    assert.ok(section);
+    // Nested Categories (h3) is a child of Configuring Categories (h2)
+    assert.ok(section!.content.includes("Nested Categories"));
+    assert.ok(section!.content.includes("nest categories up to 10 levels"));
+    // Related Links (h2) is a sibling, not a child — must not be included
+    assert.ok(!section!.content.includes("Related Links"));
+  });
+
+  it("returns null when no heading matches", () => {
+    const section = extractSection(SAMPLE_MARKDOWN, "nonexistent section xyz");
+    assert.equal(section, null);
+  });
+
+  it("returns null for an empty query", () => {
+    const section = extractSection(SAMPLE_MARKDOWN, "   ");
+    assert.equal(section, null);
+  });
+});
+
+describe("stripPageFooter", () => {
+  it("removes everything from the Target Insertion marker onward", () => {
+    const raw = [
+      "# Real Title",
+      "",
+      "Real content that should be kept.",
+      "",
+      "+-----------------------------------+",
+      "| Target Insertion                  |",
+      "+--------------------------+--------+",
+      "| recommendation-more-help |        |",
+      "+--------------------------+--------+",
+      "",
+      "+------+",
+      "| Toc  |",
+      "+------+",
+    ].join("\n");
+
+    const result = stripPageFooter(raw);
+    assert.ok(result.includes("Real content that should be kept."));
+    assert.ok(!result.includes("Target Insertion"));
+    assert.ok(!result.includes("recommendation-more-help"));
+    assert.ok(!result.includes("| Toc  |"));
+  });
+
+  it("leaves content unchanged when no footer marker is present", () => {
+    assert.equal(stripPageFooter(SAMPLE_MARKDOWN), SAMPLE_MARKDOWN);
   });
 });
 

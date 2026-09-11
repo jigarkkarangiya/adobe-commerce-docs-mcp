@@ -164,7 +164,37 @@ function extractMainContent(html: string): string {
 
 // --- Markdown metadata cleaning ---
 
-function cleanMarkdown(raw: string): string {
+/**
+ * Adobe's markdown export appends a fixed page-footer block after the real
+ * content ends: a "Target Insertion" widget marker, then Toc/Doc
+ * Actions/Mini Toc/Metadata tables (git hashes, JSON-LD, exl-id, etc).
+ * This is present in the raw source on every page we've checked, so cut
+ * everything from that marker onward before it reaches any tool output.
+ * Long pages previously hid this because smartTruncate's length cap
+ * happened to cut before reaching the footer — short pages did not.
+ */
+export function stripPageFooter(raw: string): string {
+  const lines = raw.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes("Target Insertion")) {
+      // Walk back to the top border of this table (+---+ line) so the
+      // table itself is excluded too, not just the marker line.
+      let cut = i;
+      for (let j = i - 1; j >= 0 && j >= i - 3; j--) {
+        const t = lines[j].trim();
+        if (t.startsWith("+") && t.endsWith("+") && t.includes("-")) {
+          cut = j;
+          break;
+        }
+      }
+      return lines.slice(0, cut).join("\n").trim();
+    }
+  }
+  return raw;
+}
+
+function cleanMarkdown(rawInput: string): string {
+  const raw = stripPageFooter(rawInput);
   const lines = raw.split("\n");
   const cleaned: string[] = [];
   let insideMetadataTable = false;
@@ -332,6 +362,65 @@ export function extractPageToc(markdown: string): TocEntry[] {
     });
   }
   return entries;
+}
+
+export interface DocSection {
+  heading: string;
+  level: number;
+  content: string;
+}
+
+/**
+ * Finds the first heading whose title contains `query` (case-insensitive)
+ * and returns everything under it — including nested subheadings — up to
+ * (not including) the next heading at the same or a shallower level.
+ *
+ * This lets a large page be read section-by-section instead of only as a
+ * whole, which is the only way to reach content past `smartTruncate`'s cutoff
+ * on very long pages: fetch the raw page once, then pull just the section
+ * that's actually needed instead of the full (possibly truncated) document.
+ */
+export function extractSection(
+  markdown: string,
+  query: string,
+): DocSection | null {
+  const lines = markdown.split("\n");
+  const headingRe = /^(#{1,6})\s+(.+)$/;
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+
+  let startIdx = -1;
+  let level = 0;
+  let heading = "";
+
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(headingRe);
+    if (!m) continue;
+    const title = m[2].trim().replace(/[`*_]/g, "");
+    if (title.toLowerCase().includes(q)) {
+      startIdx = i;
+      level = m[1].length;
+      heading = title;
+      break;
+    }
+  }
+
+  if (startIdx === -1) return null;
+
+  let endIdx = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const m = lines[i].match(headingRe);
+    if (m && m[1].length <= level) {
+      endIdx = i;
+      break;
+    }
+  }
+
+  return {
+    heading,
+    level,
+    content: lines.slice(startIdx, endIdx).join("\n").trim(),
+  };
 }
 
 export function extractStructuredContent(

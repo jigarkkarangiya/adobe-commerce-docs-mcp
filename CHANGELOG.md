@@ -5,6 +5,28 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
+## [2.0.5] - 2026-09-12
+
+### Added
+- New tool `get_doc_section(url, heading)` — fetches just one section of a
+  page by heading name (case-insensitive substring match), including its
+  nested subheadings. On long pages, `get_doc_content`'s full-page fetch
+  truncates at `MAX_CONTENT_LENGTH` before reaching later sections (e.g. an
+  "SSH tunneling" section near the end of a long Commerce Cloud page); this
+  tool fetches the raw page once and returns only the needed section, so
+  content past the truncation point is actually reachable. Use
+  `get_page_toc` first to find the heading name to target.
+
+### Fixed
+- Every fetched page was carrying Adobe's page-footer boilerplate (a
+  "Target Insertion" widget marker, then Toc/Doc Actions/Mini Toc/Metadata
+  tables — git hashes, JSON-LD, exl-id, etc, ~16KB on the page this was
+  caught on) into tool output. Long pages mostly hid this because
+  `smartTruncate`'s length cap happened to cut before reaching the footer;
+  short pages did not, and were leaking it directly into `get_doc_content`
+  results. `cleanMarkdown` now strips everything from the footer marker
+  onward before any tool sees it.
+
 ## [2.0.4] - 2026-09-12
 
 ### Added
@@ -155,6 +177,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - LRU page cache (100 pages, 1h TTL) plus a 24h disk sitemap cache.
 - Sitemap index support with concurrent sub-sitemap fetching.
 
+[2.0.5]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.3...v2.0.4
 [2.0.3]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.1...v2.0.2
