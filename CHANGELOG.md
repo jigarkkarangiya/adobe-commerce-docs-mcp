@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `.mcp.json` at repo root, the standard MCP client config file (Open
+  Plugins standard) that lets tool directories like cursor.directory
+  auto-detect this as a valid MCP server without inspecting `package.json`.
+
 ## [2.0.3] - 2026-09-12
 
 ### Added

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "adobe-commerce-docs": {
+      "command": "npx",
+      "args": ["-y", "adobe-commerce-docs-mcp"]
+    }
+  }
+}
