@@ -43,12 +43,8 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      # npm Trusted Publishing (OIDC) requires npm CLI >= 11.5.1; Node 20's
-      # bundled npm is older, so upgrade it before publishing. No NPM_TOKEN
-      # secret needed — npm verifies this workflow run directly via the
-      # id-token permission above, once configured as a trusted publisher
-      # for this package on npmjs.com.
-      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
       - run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
