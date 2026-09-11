@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/adobe-commerce-docs-mcp)](https://www.npmjs.com/package/adobe-commerce-docs-mcp)
 [![CI](https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/actions)
-[![License: CC BY-NC 4.0](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg)](LICENSE)
+[![License: Source-Available](https://img.shields.io/badge/License-Source--Available-lightgrey.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
 
 An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that gives AI assistants direct access to the official **Adobe Commerce / Magento documentation**. It indexes the Adobe Experience League sitemap and provides tools, resources, and prompts to search, browse, and read documentation pages — all from within your AI coding assistant.
@@ -12,7 +12,9 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that 
 ## Features
 
 - **9 tools** — search, read pages, browse sections, find related docs, extract code examples, get page TOC, lookup errors, multi-query search, and refresh
-- **MCP Resources** — browsable `commerce://` URIs for sections and doc pages
+- **Structured tool output** — every tool returns typed `structuredContent` (JSON Schema `outputSchema`) alongside human-readable markdown, so clients can parse results programmatically
+- **Tool annotations** — all tools declare `readOnlyHint`/`openWorldHint`/`idempotentHint` so MCP clients can reduce confirmation friction for safe, read-only operations
+- **MCP Resources** — browsable `commerce://` URIs for sections and doc pages, capped at 300 entries per section read to stay context-safe
 - **MCP Prompts** — reusable workflows for troubleshooting, code review, upgrades, and concept explanation
 - **BM25 search** — relevance-ranked results with IDF weighting and document-length normalization
 - **Synonym expansion** — `graphql` also matches `gql`, `cloud` matches `ece`, `module` matches `extension`, and 40+ more
@@ -106,11 +108,11 @@ Use these slugs with the `section` parameter:
 | `commerce-admin` | Admin panel, catalog, customers, orders, stores configuration |
 | `commerce-operations` | Installation, upgrade, configuration, CLI tools, patches |
 | `commerce-cloud-service` | Cloud infrastructure, deployment, environments |
+| `commerce-on-cloud` | Cloud architecture, CLI/branches, CDN & Fastly VCL, dev tools & integrations |
 | `commerce-merchant-services` | Live Search, Product Recommendations, Payment Services |
 | `commerce-channels` | Amazon Sales Channel, Channel Manager |
 | `commerce-knowledge-base` | Troubleshooting articles and known issues |
 | `commerce-learn` | Tutorials and video guides |
-| `commerce-php` | PHP developer guide, extensions, APIs |
 | `commerce-business-intelligence` | Reporting and analytics |
 
 ---
@@ -476,6 +478,8 @@ adobe-commerce-docs-mcp/
 |---|---|
 | npm | [npmjs.com/package/adobe-commerce-docs-mcp](https://www.npmjs.com/package/adobe-commerce-docs-mcp) |
 | GitHub | [github.com/jigarkkarangiya/adobe-commerce-docs-mcp](https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp) |
+| Official MCP Registry | `io.github.jigarkkarangiya/adobe-commerce-docs-mcp` — see [server.json](server.json) |
+| Cursor | [cursor.directory](https://cursor.directory) — search `adobe-commerce-docs` |
 | mcp.so | [mcp.so](https://mcp.so) — search `adobe-commerce-docs` |
 | Smithery | [smithery.ai](https://smithery.ai) — search `adobe-commerce-docs` |
 | Glama | [glama.ai/mcp/servers](https://glama.ai/mcp/servers) — search `adobe commerce` |
@@ -491,8 +495,16 @@ adobe-commerce-docs-mcp/
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for what's new, fixed, changed, and improved in each release.
+
+---
+
 ## License
 
-[CC BY-NC 4.0](LICENSE)
+[Source-Available — All Rights Reserved](LICENSE)
 
-CC BY-NC 4.0 © 2026 [Jigar Karangiya](https://jigarkarangiya.com/) · [LinkedIn](https://www.linkedin.com/in/jigar-ahir/)
+The source is public for transparency and evaluation. You may install and run the unmodified package for personal, educational, or internal non-commercial use. Modification, forking, redistribution, and commercial use are **not** permitted without prior written permission. See [LICENSE](LICENSE) for full terms.
+
+© 2026 [Jigar Karangiya](https://jigarkarangiya.com/) · [LinkedIn](https://www.linkedin.com/in/jigar-ahir/)

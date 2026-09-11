@@ -18,7 +18,7 @@ const cacheDir = envStr(
 );
 
 export const config = {
-  version: "2.0.2",
+  version: "2.0.3",
 
   sitemapUrl: envStr(
     "SITEMAP_URL",
@@ -43,16 +43,13 @@ export const config = {
   userAgent:
     "Mozilla/5.0 (compatible; AdobeCommerceMCP/2.0; +https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp)",
 
-  commercePathPrefixes: [
-    "/en/docs/commerce",
-    "/en/docs/commerce-admin",
-    "/en/docs/commerce-operations",
-    "/en/docs/commerce-merchant-services",
-    "/en/docs/commerce-channels",
-    "/en/docs/commerce-knowledge-base",
-    "/en/docs/commerce-learn",
-    "/en/docs/commerce-cloud-service",
-    "/en/docs/commerce-business-intelligence",
-    "/en/docs/commerce-php",
-  ],
+  // Commerce doc sections are discovered dynamically from the sitemap by
+  // product-slug pattern (see isCommerceUrl in sitemap.ts) rather than a
+  // hardcoded list, so new Adobe Commerce sections are indexed automatically.
+  // Use this only to force-include a product slug that doesn't start with
+  // "commerce" but should still be indexed (comma-separated env var).
+  extraCommerceSlugs: envStr("EXTRA_COMMERCE_SLUGS", "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
 };

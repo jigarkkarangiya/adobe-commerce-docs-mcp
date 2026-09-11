@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.jigarkkarangiya/adobe-commerce-docs-mcp",
+  "description": "MCP server for Adobe Commerce / Magento 2 documentation — search, browse, and read official docs.",
+  "repository": {
+    "url": "https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp",
+    "source": "github"
+  },
+  "version": "2.0.3",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "adobe-commerce-docs-mcp",
+      "version": "2.0.3",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "CACHE_DIR",
+          "description": "Directory for the on-disk sitemap and page cache. Defaults to ~/.cache/adobe-commerce-docs-mcp.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "SITEMAP_URL",
+          "description": "Override the Adobe Experience League sitemap URL to index. Defaults to https://experienceleague.adobe.com/en/sitemap.xml.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        },
+        {
+          "name": "EXTRA_COMMERCE_SLUGS",
+          "description": "Comma-separated list of extra Experience League product slugs to index beyond the auto-detected commerce/commerce-* sections.",
+          "isRequired": false,
+          "isSecret": false,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

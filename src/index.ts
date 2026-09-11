@@ -38,7 +38,10 @@ function preWarm(): void {
     try {
       docEntries = await loadSitemap();
       isLoaded = true;
-      console.error(`Pre-warm complete: ${docEntries.length} pages indexed`);
+      const sections = getSectionSlugs(docEntries);
+      console.error(
+        `Pre-warm complete: ${docEntries.length} pages indexed across ${sections.length} sections (${sections.join(", ")})`,
+      );
     } catch (err) {
       console.error("Pre-warm failed, will retry on first tool call:", err);
       loadPromise = null;
@@ -175,12 +178,19 @@ server.resource(
       };
     }
 
-    const text = entries.map((e) => `- ${e.title}\n  ${e.url}`).join("\n");
+    const RESOURCE_PAGE_CAP = 300;
+    const shown = entries.slice(0, RESOURCE_PAGE_CAP);
+    const text = shown.map((e) => `- ${e.title}\n  ${e.url}`).join("\n");
+    const truncationNote =
+      entries.length > RESOURCE_PAGE_CAP
+        ? `\n\n... showing first ${RESOURCE_PAGE_CAP} of ${entries.length} pages. Use \`search_adobe_commerce_docs\` with section: "${section}" and a query to find a specific page instead of browsing the full list.`
+        : "";
+
     return {
       contents: [
         {
           uri: uri.href,
-          text: `${section} — ${entries.length} pages:\n\n${text}`,
+          text: `${section} — ${entries.length} pages:\n\n${text}${truncationNote}`,
           mimeType: "text/plain",
         },
       ],
@@ -192,13 +202,16 @@ server.resource(
 //  PROMPTS  (Phase 2)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-server.prompt(
+server.registerPrompt(
   "troubleshoot-commerce-error",
-  "Troubleshoot an Adobe Commerce / Magento error using the Knowledge Base",
   {
-    error_message: z
-      .string()
-      .describe("The error message or error code to troubleshoot"),
+    title: "Troubleshoot Commerce Error",
+    description: "Troubleshoot an Adobe Commerce / Magento error using the Knowledge Base",
+    argsSchema: {
+      error_message: z
+        .string()
+        .describe("The error message or error code to troubleshoot"),
+    },
   },
   ({ error_message }) => ({
     messages: [
@@ -225,15 +238,18 @@ server.prompt(
   }),
 );
 
-server.prompt(
+server.registerPrompt(
   "explain-commerce-concept",
-  "Explain an Adobe Commerce / Magento concept using official docs",
   {
-    topic: z
-      .string()
-      .describe(
-        "The concept to explain (e.g., 'dependency injection', 'EAV model')",
-      ),
+    title: "Explain Commerce Concept",
+    description: "Explain an Adobe Commerce / Magento concept using official docs",
+    argsSchema: {
+      topic: z
+        .string()
+        .describe(
+          "The concept to explain (e.g., 'dependency injection', 'EAV model')",
+        ),
+    },
   },
   ({ topic }) => ({
     messages: [
@@ -256,13 +272,14 @@ server.prompt(
   }),
 );
 
-server.prompt(
+server.registerPrompt(
   "commerce-code-review",
-  "Review Magento/Commerce code against official best practices",
   {
-    code: z
-      .string()
-      .describe("The PHP/XML/JS code to review"),
+    title: "Commerce Code Review",
+    description: "Review Magento/Commerce code against official best practices",
+    argsSchema: {
+      code: z.string().describe("The PHP/XML/JS code to review"),
+    },
   },
   ({ code }) => ({
     messages: [
@@ -288,12 +305,15 @@ server.prompt(
   }),
 );
 
-server.prompt(
+server.registerPrompt(
   "commerce-upgrade-guide",
-  "Generate an upgrade checklist for Commerce version migration",
   {
-    from_version: z.string().describe("Current version (e.g., '2.4.6')"),
-    to_version: z.string().describe("Target version (e.g., '2.4.7')"),
+    title: "Commerce Upgrade Guide",
+    description: "Generate an upgrade checklist for Commerce version migration",
+    argsSchema: {
+      from_version: z.string().describe("Current version (e.g., '2.4.6')"),
+      to_version: z.string().describe("Target version (e.g., '2.4.7')"),
+    },
   },
   ({ from_version, to_version }) => ({
     messages: [
@@ -320,27 +340,50 @@ server.prompt(
 //  TOOLS — Existing (updated)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-server.tool(
+const searchResultShape = {
+  title: z.string(),
+  url: z.string(),
+  snippet: z.string(),
+  lastmod: z.string(),
+};
+
+server.registerTool(
   "search_adobe_commerce_docs",
-  "Search Adobe Commerce / Magento documentation. Returns pages ranked by BM25 relevance with snippets. Supports synonym expansion (e.g. 'graphql' also matches 'gql') and fuzzy matching for typos.",
   {
-    query: z
-      .string()
-      .describe(
-        "Search keywords (e.g., 'graphql product query', 'checkout configuration')",
-      ),
-    limit: z
-      .number()
-      .min(1)
-      .max(50)
-      .default(15)
-      .describe("Max results (default: 15)"),
-    section: z
-      .string()
-      .optional()
-      .describe(
-        "Filter by section slug (e.g., commerce-admin, commerce-php, commerce-cloud-service)",
-      ),
+    title: "Search Adobe Commerce Docs",
+    description:
+      "Search Adobe Commerce / Magento documentation. Returns pages ranked by BM25 relevance with snippets. Supports synonym expansion (e.g. 'graphql' also matches 'gql') and fuzzy matching for typos.",
+    inputSchema: {
+      query: z
+        .string()
+        .describe(
+          "Search keywords (e.g., 'graphql product query', 'checkout configuration')",
+        ),
+      limit: z
+        .number()
+        .min(1)
+        .max(50)
+        .default(15)
+        .describe("Max results (default: 15)"),
+      section: z
+        .string()
+        .optional()
+        .describe(
+          "Filter by section slug (e.g., commerce-admin, commerce-cloud-service, commerce-on-cloud)",
+        ),
+    },
+    outputSchema: {
+      query: z.string(),
+      count: z.number(),
+      results: z.array(z.object(searchResultShape)),
+    },
+    annotations: {
+      title: "Search Adobe Commerce Docs",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
   },
   async ({ query, limit, section }) => {
     try {
@@ -359,6 +402,7 @@ server.tool(
               text: `No results for "${query}"${section ? ` in "${section}"` : ""}. Try broader keywords or remove the section filter.`,
             },
           ],
+          structuredContent: { query, count: 0, results: [] },
         };
       }
 
@@ -376,6 +420,16 @@ server.tool(
             text: `Found ${results.length} results for "${query}":\n\n${formatted}\n\nUse \`get_doc_content\` with a URL to read the full page.`,
           },
         ],
+        structuredContent: {
+          query,
+          count: results.length,
+          results: results.map((r) => ({
+            title: r.entry.title,
+            url: r.entry.url,
+            snippet: r.snippet,
+            lastmod: r.entry.lastmod,
+          })),
+        },
       };
     } catch (err) {
       return {
@@ -391,19 +445,37 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   "get_doc_content",
-  "Fetch the full content of an Adobe Commerce documentation page as clean markdown.",
   {
-    url: z
-      .string()
-      .url()
-      .describe("Full URL of the documentation page"),
+    title: "Get Doc Content",
+    description:
+      "Fetch the full content of an Adobe Commerce documentation page as clean markdown.",
+    inputSchema: {
+      url: z
+        .string()
+        .url()
+        .describe("Full URL of the documentation page"),
+    },
+    outputSchema: {
+      url: z.string(),
+      content: z.string(),
+    },
+    annotations: {
+      title: "Get Doc Content",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
   },
   async ({ url }) => {
     try {
       const content = await fetchPageContent(url);
-      return { content: [{ type: "text" as const, text: content }] };
+      return {
+        content: [{ type: "text" as const, text: content }],
+        structuredContent: { url, content },
+      };
     } catch (err) {
       return {
         content: [
@@ -418,10 +490,26 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   "list_doc_sections",
-  "List all Adobe Commerce documentation sections with page counts.",
-  {},
+  {
+    title: "List Doc Sections",
+    description: "List all Adobe Commerce documentation sections with page counts.",
+    inputSchema: {},
+    outputSchema: {
+      total_pages: z.number(),
+      sections: z.array(
+        z.object({ slug: z.string(), label: z.string(), count: z.number() }),
+      ),
+    },
+    annotations: {
+      title: "List Doc Sections",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
   async () => {
     try {
       await ensureLoaded();
@@ -443,6 +531,14 @@ server.tool(
             text: `Adobe Commerce Documentation (${docEntries.length} pages):\n\n${formatted}\n\nUse the slug with \`search_adobe_commerce_docs\` section parameter.`,
           },
         ],
+        structuredContent: {
+          total_pages: docEntries.length,
+          sections: sorted.map(([slug, count]) => ({
+            slug,
+            label: slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            count,
+          })),
+        },
       };
     } catch (err) {
       return {
@@ -458,10 +554,23 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   "refresh_sitemap",
-  "Force-refresh the cached sitemap data from Adobe Experience League.",
-  {},
+  {
+    title: "Refresh Sitemap",
+    description: "Force-refresh the cached sitemap data from Adobe Experience League.",
+    inputSchema: {},
+    outputSchema: {
+      pages_indexed: z.number(),
+    },
+    annotations: {
+      title: "Refresh Sitemap",
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
   async () => {
     try {
       isLoaded = false;
@@ -478,6 +587,7 @@ server.tool(
             text: `Sitemap refreshed. ${docEntries.length} pages indexed.`,
           },
         ],
+        structuredContent: { pages_indexed: docEntries.length },
       };
     } catch (err) {
       return {
@@ -497,20 +607,36 @@ server.tool(
 //  TOOLS — New (Phase 3)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-server.tool(
+server.registerTool(
   "get_related_docs",
-  "Find sibling/related documentation pages for a given page URL (same parent in the doc tree).",
   {
-    url: z
-      .string()
-      .url()
-      .describe("Full URL of the documentation page"),
-    limit: z
-      .number()
-      .min(1)
-      .max(30)
-      .default(10)
-      .describe("Max related pages (default: 10)"),
+    title: "Get Related Docs",
+    description:
+      "Find sibling/related documentation pages for a given page URL (same parent in the doc tree).",
+    inputSchema: {
+      url: z
+        .string()
+        .url()
+        .describe("Full URL of the documentation page"),
+      limit: z
+        .number()
+        .min(1)
+        .max(30)
+        .default(10)
+        .describe("Max related pages (default: 10)"),
+    },
+    outputSchema: {
+      url: z.string(),
+      count: z.number(),
+      related: z.array(z.object({ title: z.string(), url: z.string() })),
+    },
+    annotations: {
+      title: "Get Related Docs",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
   },
   async ({ url, limit }) => {
     try {
@@ -525,6 +651,7 @@ server.tool(
               text: `No related pages found for ${url}.`,
             },
           ],
+          structuredContent: { url, count: 0, related: [] },
         };
       }
 
@@ -539,6 +666,11 @@ server.tool(
             text: `${related.length} related pages:\n\n${formatted}`,
           },
         ],
+        structuredContent: {
+          url,
+          count: related.length,
+          related: related.map((r) => ({ title: r.title, url: r.url })),
+        },
       };
     } catch (err) {
       return {
@@ -554,14 +686,30 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   "get_code_examples",
-  "Extract only code examples from a documentation page. Returns fenced code blocks without prose — much more token-efficient than full page fetch.",
   {
-    url: z
-      .string()
-      .url()
-      .describe("Full URL of the documentation page"),
+    title: "Get Code Examples",
+    description:
+      "Extract only code examples from a documentation page. Returns fenced code blocks without prose — much more token-efficient than full page fetch.",
+    inputSchema: {
+      url: z
+        .string()
+        .url()
+        .describe("Full URL of the documentation page"),
+    },
+    outputSchema: {
+      url: z.string(),
+      count: z.number(),
+      examples: z.array(z.object({ language: z.string(), code: z.string() })),
+    },
+    annotations: {
+      title: "Get Code Examples",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
   },
   async ({ url }) => {
     try {
@@ -576,6 +724,7 @@ server.tool(
               text: `No code examples found on ${url}.`,
             },
           ],
+          structuredContent: { url, count: 0, examples: [] },
         };
       }
 
@@ -593,6 +742,7 @@ server.tool(
             text: `${examples.length} code example(s) from ${url}:\n\n${formatted}`,
           },
         ],
+        structuredContent: { url, count: examples.length, examples },
       };
     } catch (err) {
       return {
@@ -608,14 +758,29 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   "get_page_toc",
-  "Get the table of contents (heading hierarchy) of a documentation page. Useful for understanding structure before fetching the full (expensive) content.",
   {
-    url: z
-      .string()
-      .url()
-      .describe("Full URL of the documentation page"),
+    title: "Get Page TOC",
+    description:
+      "Get the table of contents (heading hierarchy) of a documentation page. Useful for understanding structure before fetching the full (expensive) content.",
+    inputSchema: {
+      url: z
+        .string()
+        .url()
+        .describe("Full URL of the documentation page"),
+    },
+    outputSchema: {
+      url: z.string(),
+      toc: z.array(z.object({ level: z.number(), title: z.string() })),
+    },
+    annotations: {
+      title: "Get Page TOC",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
   },
   async ({ url }) => {
     try {
@@ -630,6 +795,7 @@ server.tool(
               text: `No headings found on ${url}.`,
             },
           ],
+          structuredContent: { url, toc: [] },
         };
       }
 
@@ -644,6 +810,7 @@ server.tool(
             text: `Table of Contents — ${url}:\n\n${formatted}`,
           },
         ],
+        structuredContent: { url, toc },
       };
     } catch (err) {
       return {
@@ -659,15 +826,33 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   "lookup_error_code",
-  "Look up an Adobe Commerce error code or message in the Knowledge Base. Auto-fetches the top result content for immediate answers.",
   {
-    error: z
-      .string()
-      .describe(
-        "Error code or message (e.g., 'MDVA-43395', 'Unable to serialize value')",
-      ),
+    title: "Lookup Error Code",
+    description:
+      "Look up an Adobe Commerce error code or message in the Knowledge Base. Auto-fetches the top result content for immediate answers.",
+    inputSchema: {
+      error: z
+        .string()
+        .describe(
+          "Error code or message (e.g., 'MDVA-43395', 'Unable to serialize value')",
+        ),
+    },
+    outputSchema: {
+      error: z.string(),
+      matched: z
+        .object({ title: z.string(), url: z.string() })
+        .nullable(),
+      others: z.array(z.object({ title: z.string(), url: z.string() })),
+    },
+    annotations: {
+      title: "Lookup Error Code",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
   },
   async ({ error }) => {
     try {
@@ -688,6 +873,7 @@ server.tool(
               text: `No documentation found for "${error}". Try different keywords or check Adobe Commerce support.`,
             },
           ],
+          structuredContent: { error, matched: null, others: [] },
         };
       }
 
@@ -712,7 +898,14 @@ server.tool(
             )
             .join("\n\n");
 
-      return { content: [{ type: "text" as const, text }] };
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: {
+          error,
+          matched: { title: results[0].entry.title, url: results[0].entry.url },
+          others: results.slice(1).map((r) => ({ title: r.entry.title, url: r.entry.url })),
+        },
+      };
     } catch (err) {
       return {
         content: [
@@ -727,25 +920,46 @@ server.tool(
   },
 );
 
-server.tool(
+server.registerTool(
   "multi_page_search",
-  "Search documentation with multiple queries at once. Returns de-duplicated results from all queries — reduces round-trips when researching a topic from multiple angles.",
   {
-    queries: z
-      .array(z.string())
-      .min(1)
-      .max(5)
-      .describe("Array of search queries (1–5)"),
-    limit_per_query: z
-      .number()
-      .min(1)
-      .max(20)
-      .default(5)
-      .describe("Max results per query (default: 5)"),
-    section: z
-      .string()
-      .optional()
-      .describe("Optional section filter for all queries"),
+    title: "Multi-Query Search",
+    description:
+      "Search documentation with multiple queries at once. Returns de-duplicated results from all queries — reduces round-trips when researching a topic from multiple angles.",
+    inputSchema: {
+      queries: z
+        .array(z.string())
+        .min(1)
+        .max(5)
+        .describe("Array of search queries (1–5)"),
+      limit_per_query: z
+        .number()
+        .min(1)
+        .max(20)
+        .default(5)
+        .describe("Max results per query (default: 5)"),
+      section: z
+        .string()
+        .optional()
+        .describe("Optional section filter for all queries"),
+    },
+    outputSchema: {
+      queries: z.array(z.string()),
+      unique_count: z.number(),
+      results: z.array(
+        z.object({
+          query: z.string(),
+          matches: z.array(z.object(searchResultShape)),
+        }),
+      ),
+    },
+    annotations: {
+      title: "Multi-Query Search",
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
   },
   async ({ queries, limit_per_query, section }) => {
     try {
@@ -756,11 +970,25 @@ server.tool(
         : docEntries;
       const seen = new Set<string>();
       const blocks: string[] = [];
+      const structuredResults: {
+        query: string;
+        matches: { title: string; url: string; snippet: string; lastmod: string }[];
+      }[] = [];
 
       for (const q of queries) {
         const results = searchEntries(pool, q, limit_per_query);
         const unique = results.filter((r) => !seen.has(r.entry.url));
         unique.forEach((r) => seen.add(r.entry.url));
+
+        structuredResults.push({
+          query: q,
+          matches: unique.map((r) => ({
+            title: r.entry.title,
+            url: r.entry.url,
+            snippet: r.snippet,
+            lastmod: r.entry.lastmod,
+          })),
+        });
 
         if (unique.length > 0) {
           const list = unique
@@ -782,6 +1010,11 @@ server.tool(
             text: `Multi-search — ${seen.size} unique pages:\n\n${blocks.join("\n\n")}`,
           },
         ],
+        structuredContent: {
+          queries,
+          unique_count: seen.size,
+          results: structuredResults,
+        },
       };
     } catch (err) {
       return {

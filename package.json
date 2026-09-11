@@ -1,9 +1,11 @@
 {
   "name": "adobe-commerce-docs-mcp",
-  "version": "2.0.2",
+  "version": "2.0.3",
+  "mcpName": "io.github.jigarkkarangiya/adobe-commerce-docs-mcp",
   "description": "MCP server for Adobe Commerce / Magento 2 documentation. Gives AI assistants (Claude, Cursor, Cline, Windsurf) direct access to official Adobe Commerce docs \u2014 products, orders, catalog, checkout, B2B, cloud, and more.",
   "type": "module",
   "main": "dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "adobe-commerce-docs-mcp": "dist/index.js"
   },
@@ -51,7 +53,7 @@
     "checkout",
     "catalog"
   ],
-  "license": "CC-BY-NC-4.0",
+  "license": "SEE LICENSE IN LICENSE",
   "author": "Jigar Karangiya",
   "repository": {
     "type": "git",
@@ -65,8 +67,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1",
-    "fast-xml-parser": "^5.2.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "fast-xml-parser": "^5.11.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

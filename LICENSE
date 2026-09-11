@@ -1,36 +1,51 @@
-Creative Commons Attribution-NonCommercial 4.0 International License
-
+Adobe Commerce Docs MCP — Source-Available License
 Copyright (c) 2026 Jigar Karangiya
   Website: https://jigarkarangiya.com/
   LinkedIn: https://www.linkedin.com/in/jigar-ahir/
 
-This work is licensed under the Creative Commons Attribution-NonCommercial 4.0
-International License.
+All rights reserved.
 
-You are free to:
-  - Share: copy and redistribute the material in any medium or format
-  - Adapt: remix, transform, and build upon the material
+This repository and the accompanying software ("the Software") are made
+available publicly for transparency and evaluation purposes. The source
+code being visible does not grant any license to use it beyond the terms
+below.
 
-Under the following terms:
-  - Attribution: You must give appropriate credit, provide a link to the license,
-    and indicate if changes were made. You may do so in any reasonable manner,
-    but not in any way that suggests the licensor endorses you or your use.
-  - NonCommercial: You may NOT use the material for commercial purposes.
-    Commercial purposes include but are not limited to:
-      * Selling the software or access to it
-      * Integrating it into a paid product or SaaS offering
-      * Using it within a company to generate revenue as a primary business function
-      * Sublicensing or redistributing for a fee
+1. Permitted use
+   You may:
+     - View, read, and audit the source code.
+     - Install and run the unmodified Software as published (e.g. via npm
+       or npx) for personal, educational, or internal non-commercial
+       evaluation purposes.
 
-No additional restrictions: You may not apply legal terms or technological measures
-that legally restrict others from doing anything the license permits.
+2. Not permitted
+   You may NOT, without prior written permission from the copyright holder:
+     - Modify, adapt, translate, or create derivative works based on the
+       Software or any part of it.
+     - Fork, redistribute, sublicense, sell, rent, lease, or otherwise
+       make the Software (modified or unmodified) available to third
+       parties, whether for free or for a fee.
+     - Use the Software, in whole or in part, for any commercial purpose,
+       including but not limited to selling it, bundling it into a paid
+       product or SaaS offering, or using it within a company to generate
+       revenue as a primary business function.
+     - Remove or alter any copyright, attribution, or license notices
+       contained in the Software.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+3. Reservation of rights
+   All rights not expressly granted in Section 1 are reserved by the
+   copyright holder. No patent, trademark, or other intellectual property
+   rights are granted under this license.
 
-Full license text: https://creativecommons.org/licenses/by-nc/4.0/legalcode
-Contact: https://jigarkarangiya.com/ | https://www.linkedin.com/in/jigar-ahir/
+4. Requesting permission
+   For permission to modify, redistribute, or use the Software
+   commercially, contact the copyright holder:
+     https://jigarkarangiya.com/ | https://www.linkedin.com/in/jigar-ahir/
+
+5. No warranty
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+   OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+   IN NO EVENT SHALL THE AUTHOR OR COPYRIGHT HOLDER BE LIABLE FOR ANY
+   CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+   TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE
+   SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
