@@ -24,6 +24,7 @@ An [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that 
 - **Synonym expansion** — `graphql` also matches `gql`, `cloud` matches `ece`, `module` matches `extension`, and 40+ more
 - **Fuzzy matching** — tolerates typos like `chekout` → `checkout`, `catlog` → `catalog`
 - **Smart truncation** — cuts at heading boundaries instead of mid-sentence
+- **Instant cold start** — indexes from a sitemap snapshot bundled with the package, then refreshes live in the background — no blocking on a live sitemap fetch to answer your first query
 - **Persistent cache** — disk cache for both sitemap (24h) and page content (7 days), survives restarts
 - **HTTP transport** — `--http` flag for remote/team deployment via Streamable HTTP
 - **Docker ready** — multi-stage Dockerfile for containerized deployment
@@ -321,7 +322,7 @@ Once connected, just ask naturally in any AI chat:
 ┌─────────────┐     ┌──────────────────────────┐     ┌─────────────────────────┐
 │  AI Client   │────▶│  MCP Server (v2.0)        │────▶│  Adobe Experience League │
 │  (Cursor,    │◀────│                          │◀────│  sitemap.xml + .md pages │
-│   Claude,    │     │  9 Tools                 │     │                         │
+│   Claude,    │     │  10 Tools                │     │                         │
 │   VS Code)   │     │  3 Resources             │     └─────────────────────────┘
 │              │     │  4 Prompts               │
 └─────────────┘     └──────────────────────────┘
@@ -334,7 +335,7 @@ Once connected, just ask naturally in any AI chat:
                       └─ Disk sitemap cache: 24h TTL
 ```
 
-1. On startup, fetches the Adobe Experience League sitemap and indexes all Commerce-related URLs
+1. On startup, indexes instantly from a sitemap snapshot bundled with the package (built fresh at every npm publish), then refreshes live from Adobe Experience League in the background — search works immediately instead of blocking on a live ~77MB sitemap fetch, and self-corrects to fully live data within seconds. A valid 24h disk cache skips this and loads straight from disk.
 2. Builds an inverted index with BM25 scoring, synonym mappings, and document frequency stats
 3. When you search, terms are expanded with synonyms and matched with fuzzy fallback for typos
 4. When you ask for page content, fetches the native `.md` version (clean markdown, no HTML parsing needed)

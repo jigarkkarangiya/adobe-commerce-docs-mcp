@@ -18,7 +18,7 @@ const cacheDir = envStr(
 );
 
 export const config = {
-  version: "2.0.6",
+  version: "2.0.7",
 
   sitemapUrl: envStr(
     "SITEMAP_URL",

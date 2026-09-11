@@ -225,7 +225,14 @@ async function fetchWithConcurrency(
   return results;
 }
 
-async function fetchSitemap(): Promise<DocEntry[]> {
+/**
+ * Fetches and parses the live sitemap, bypassing both the disk cache and
+ * the bundled snapshot. Exported for scripts/build-snapshot.mjs, which
+ * calls this directly at publish time to produce the snapshot that ships
+ * with the package — using loadSitemap() there would be circular (it's
+ * the snapshot consumer, not producer).
+ */
+export async function fetchSitemap(): Promise<DocEntry[]> {
   const xml = await fetchUrl(config.sitemapUrl);
   const parser = createXmlParser();
   const parsed = parser.parse(stripAlternateLinks(xml));
@@ -446,14 +453,83 @@ export async function clearCache(): Promise<void> {
   }
 }
 
+/**
+ * Loads the snapshot bundled with the npm package (built at publish time
+ * by `npm run build:snapshot`, shipped as dist/sitemap-snapshot.json).
+ * Lets a cold start (no disk cache yet) index instantly from a local file
+ * read instead of blocking on a live ~77MB sitemap fetch — the snapshot is
+ * only ever a starting point though: loadSitemap() always kicks off a live
+ * refresh in the background right after using it, so results self-correct
+ * to fully live data within seconds rather than staying pinned to
+ * whatever was current as of the last publish.
+ */
+async function loadBundledSnapshot(): Promise<DocEntry[] | null> {
+  try {
+    const snapshotUrl = new URL("./sitemap-snapshot.json", import.meta.url);
+    const data = await readFile(snapshotUrl, "utf-8");
+    const entries = JSON.parse(data) as DocEntry[];
+    return entries.length > 0 ? entries : null;
+  } catch {
+    return null; // not present (e.g. running from source without a publish step) — not an error
+  }
+}
+
+function refreshFromLiveInBackground(
+  onUpdate?: (entries: DocEntry[]) => void,
+): void {
+  fetchSitemap()
+    .then(async (entries) => {
+      if (entries.length === 0) return; // don't replace good data with a failed/empty fetch
+      await saveToCache(entries);
+      indexedEntries = entries;
+      invertedIndex = buildInvertedIndex(entries);
+      console.error(`Background sitemap refresh complete: ${entries.length} pages indexed.`);
+      onUpdate?.(entries);
+    })
+    .catch((err) => {
+      console.error(
+        "Background sitemap refresh failed, continuing with the bundled snapshot:",
+        err,
+      );
+    });
+}
+
 // --- Public API ---
 
-export async function loadSitemap(): Promise<DocEntry[]> {
-  const cached = await loadFromCache();
-  if (cached) {
-    indexedEntries = cached;
-    invertedIndex = buildInvertedIndex(cached);
-    return cached;
+/**
+ * Loads and indexes the Commerce sitemap.
+ *
+ * `onUpdate` is called whenever indexedEntries changes — including from a
+ * background refresh completing after an initial snapshot-based load —
+ * so callers holding their own copy of the entries array (as index.ts
+ * does) can stay in sync. This matters for correctness, not just freshness:
+ * searchEntries()'s fast indexed path is keyed on `entries === indexedEntries`
+ * by reference, so a caller left holding a stale array after a background
+ * refresh would silently fall back to the slow linear-scan path.
+ *
+ * `forceLive` skips the cache and bundled snapshot entirely and blocks on
+ * a live fetch — used by the refresh_sitemap tool, where the whole point
+ * is a synchronous, verifiably-fresh reload rather than a fast-but-stale one.
+ */
+export async function loadSitemap(
+  onUpdate?: (entries: DocEntry[]) => void,
+  forceLive = false,
+): Promise<DocEntry[]> {
+  if (!forceLive) {
+    const cached = await loadFromCache();
+    if (cached) {
+      indexedEntries = cached;
+      invertedIndex = buildInvertedIndex(cached);
+      return cached;
+    }
+
+    const snapshot = await loadBundledSnapshot();
+    if (snapshot) {
+      indexedEntries = snapshot;
+      invertedIndex = buildInvertedIndex(snapshot);
+      refreshFromLiveInBackground(onUpdate);
+      return snapshot;
+    }
   }
 
   const entries = await fetchSitemap();

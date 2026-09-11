@@ -5,6 +5,37 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
+## [2.0.7] - 2026-09-12
+
+Ideas adopted after reviewing several comparable documentation-search MCP
+servers (mcp-sap-docs, Gitlab-Docs-MCP, Context7) for anything worth
+bringing over. A third idea (git-cloning Adobe's `AdobeDocs/*.en` GitHub
+repos instead of sitemap+HTTP fetching) was investigated and **not**
+adopted — only 7 of our 10 sections have a discoverable English-language
+source repo (`commerce-channels`, `commerce-merchant-services`, and
+`commerce-cloud-service` don't), so it can't fully replace the current
+pipeline, only partially — not worth the ongoing dual-pipeline complexity.
+
+### Added
+- Sitemap snapshot bundled with the npm package (`dist/sitemap-snapshot.json`,
+  built fresh at every `npm publish` via a new `build:snapshot` script wired
+  into `prepublishOnly`). On a cold start with no valid disk cache,
+  `loadSitemap()` now indexes from this snapshot instantly instead of
+  blocking on a live ~77MB sitemap fetch, then refreshes live in the
+  background and transparently upgrades once that completes — search works
+  immediately and self-corrects to fully live data within a couple of
+  seconds. Measured: cold start (no cache) `~1-6s` (network-dependent) →
+  `~0.1-0.3s`, verified via the real MCP protocol with a tool call fired
+  150ms after process start already returning full real results.
+  `refresh_sitemap` bypasses this and always does a true blocking live
+  fetch, since a fast-but-possibly-stale reload would defeat its purpose.
+
+### Changed
+- Tool descriptions for `search_adobe_commerce_docs`, `multi_page_search`
+  now frame the `query` parameter as "the question or task, in your own
+  words" rather than "keywords" — encourages fuller natural-language
+  queries, which give BM25 more disambiguating terms to rank on.
+
 ## [2.0.6] - 2026-09-12
 
 ### Fixed
@@ -194,6 +225,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - LRU page cache (100 pages, 1h TTL) plus a 24h disk sitemap cache.
 - Sitemap index support with concurrent sub-sitemap fetching.
 
+[2.0.7]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.6...v2.0.7
 [2.0.6]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.5...v2.0.6
 [2.0.5]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.4...v2.0.5
 [2.0.4]: https://github.com/jigarkkarangiya/adobe-commerce-docs-mcp/compare/v2.0.3...v2.0.4

@@ -49,11 +49,23 @@ let isLoaded = false;
 let loadPromise: Promise<void> | null = null;
 const startTime = Date.now();
 
+// Kept in sync with sitemap.ts's internal index even after a background
+// refresh completes post-snapshot-load — see loadSitemap()'s onUpdate
+// contract in sitemap.ts for why this matters for correctness, not just
+// freshness.
+function onSitemapUpdate(entries: DocEntry[]): void {
+  docEntries = entries;
+  const sections = getSectionSlugs(docEntries);
+  console.error(
+    `Sitemap index updated: ${docEntries.length} pages indexed across ${sections.length} sections (${sections.join(", ")})`,
+  );
+}
+
 function preWarm(): void {
   if (loadPromise) return;
   loadPromise = (async () => {
     try {
-      docEntries = await loadSitemap();
+      docEntries = await loadSitemap(onSitemapUpdate);
       isLoaded = true;
       const sections = getSectionSlugs(docEntries);
       console.error(
@@ -72,7 +84,7 @@ async function ensureLoaded(): Promise<void> {
     await loadPromise;
     if (isLoaded) return;
   }
-  docEntries = await loadSitemap();
+  docEntries = await loadSitemap(onSitemapUpdate);
   isLoaded = true;
 }
 
@@ -372,7 +384,7 @@ server.registerTool(
       "Search Adobe Commerce / Magento documentation. Returns pages ranked by BM25 relevance with snippets. Supports synonym expansion (e.g. 'graphql' also matches 'gql') and fuzzy matching for typos.",
     inputSchema: {
       query: nonEmptyQuery(
-        "Search keywords (e.g., 'graphql product query', 'checkout configuration')",
+        "The question or task you're trying to answer, in your own words — not just keywords (e.g., 'how do I query products with GraphQL', 'configure checkout for guest customers'). Fuller phrasing gives BM25 more terms to rank on.",
       ),
       limit: z
         .number()
@@ -596,7 +608,10 @@ server.registerTool(
       clearMemoryCache();
       await clearCache();
       const pagesCacheCleared = await clearDiskPageCache();
-      await ensureLoaded();
+      // forceLive: this tool's entire point is a verifiably fresh reload —
+      // skip the cache/bundled-snapshot fast path that other callers use.
+      docEntries = await loadSitemap(onSitemapUpdate, true);
+      isLoaded = true;
 
       return {
         content: [
@@ -1019,10 +1034,10 @@ server.registerTool(
       "Search documentation with multiple queries at once. Returns de-duplicated results from all queries — reduces round-trips when researching a topic from multiple angles.",
     inputSchema: {
       queries: z
-        .array(nonEmptyQuery("A search query"))
+        .array(nonEmptyQuery("A question or task, in your own words (not just keywords)"))
         .min(1)
         .max(5)
-        .describe("Array of search queries (1–5)"),
+        .describe("Array of questions/tasks to research (1–5) — one round-trip covers all of them"),
       limit_per_query: z
         .number()
         .min(1)
